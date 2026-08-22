@@ -2,10 +2,14 @@ name: Check UX/UI/Product Design Jobs
 
 on:
   schedule:
-    # GitHub Actions added native IANA timezone support for scheduled
-    # workflows in March 2026, so this runs at 09:00 Europe/Bucharest
-    # year-round with no manual UTC/DST conversion needed.
+    # 09:00 Europe/Bucharest
     - cron: "0 9 * * *"
+      timezone: "Europe/Bucharest"
+       # 14:00 Europe/Bucharest
+    - cron: "0 14 * * *"
+      timezone: "Europe/Bucharest"
+    # 18:00 Europe/Bucharest
+    - cron: "0 18 * * *"
       timezone: "Europe/Bucharest"
   workflow_dispatch: {}
 
