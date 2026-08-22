@@ -72,6 +72,21 @@
     {"name": "Szallas Group", "careers_url": "https://szallasgroup.com/career/", "ats": null, "ats_slug": null},
     {"name": "Revolut", "careers_url": "https://www.revolut.com/careers/", "ats": null, "ats_slug": null},
     {"name": "SupportYourApp", "careers_url": "https://supportyourapp.com/careers/", "ats": null, "ats_slug": null},
-    {"name": "TrustYou", "careers_url": "https://www.trustyou.com/careers/", "ats": null, "ats_slug": null}
+    {"name": "TrustYou", "careers_url": "https://www.trustyou.com/careers/", "ats": null, "ats_slug": null},
+    {"name": "Adobe", "careers_url": "https://careers.adobe.com/", "ats": null, "ats_slug": null},
+    {"name": "Oracle", "careers_url": "https://www.oracle.com/careers/", "ats": null, "ats_slug": null},
+    {"name": "IBM", "careers_url": "https://www.ibm.com/careers/", "ats": null, "ats_slug": null},
+    {"name": "Microsoft", "careers_url": "https://careers.microsoft.com/", "ats": null, "ats_slug": null},
+    {"name": "Cognizant", "careers_url": "https://careers.cognizant.com/", "ats": null, "ats_slug": null},
+    {"name": "Orange Romania", "careers_url": "https://www.orange.ro/jobs/", "ats": null, "ats_slug": null},
+    {"name": "Vodafone Romania", "careers_url": "https://www.vodafone.ro/cariere/", "ats": null, "ats_slug": null},
+    {"name": "Hogarth", "careers_url": "https://www.hogarth.com/careers", "ats": null, "ats_slug": null},
+    {"name": "SEGULA Technologies", "careers_url": "https://www.segulatechnologies.com/en/careers/", "ats": null, "ats_slug": null},
+    {"name": "Silicon Spirit", "careers_url": "https://siliconspirit.io/careers", "ats": null, "ats_slug": null},
+    {"name": "SoftServe", "careers_url": "https://career.softserveinc.com/", "ats": null, "ats_slug": null},
+    {"name": "Globant", "careers_url": "https://www.globant.com/careers", "ats": null, "ats_slug": null},
+    {"name": "Booking.com", "careers_url": "https://careers.booking.com/", "ats": null, "ats_slug": null},
+    {"name": "Amazon", "careers_url": "https://www.amazon.jobs/", "ats": null, "ats_slug": null},
+    {"name": "Axway", "careers_url": "https://www.axway.com/en/careers", "ats": null, "ats_slug": null}
   ]
 }
