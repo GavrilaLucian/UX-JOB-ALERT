@@ -27,10 +27,6 @@ def prefilter(job: Job, settings: dict) -> Job:
     title_l = job.title.lower()
 
     # 1. Excluded seniority / role titles -> hard exclude.
-    # Check both explicit phrases (e.g. "Design Lead") and standalone
-    # seniority words as whole tokens anywhere in the title (e.g. "Lead
-    # Product Designer", "Product Design Director") so word order doesn't
-    # let an excluded role slip through.
     excluded_titles = settings.get("excluded_title_keywords", [])
     hit = _contains_any(title_l, excluded_titles)
     seniority_exclude_terms = settings.get("seniority_exclude_terms", [])
@@ -44,8 +40,7 @@ def prefilter(job: Job, settings: dict) -> Job:
         job.prefilter_reasons = [f"excluded title match: {hit or word_hit}"]
         return job
 
-    # 2. Excluded field (branding/marketing/etc) -> hard exclude unless it's
-    #    a "Visual Designer" doing digital product work (keep-list override).
+    # 2. Excluded field (branding/marketing/etc) -> hard exclude unless Visual Designer + digital product.
     excluded_fields = settings.get("excluded_field_keywords", [])
     field_hit = _contains_any(text_blob, excluded_fields)
     if field_hit:
@@ -57,23 +52,24 @@ def prefilter(job: Job, settings: dict) -> Job:
             return job
         reasons.append(f"visual designer kept due to digital-product signal: {keep_hit}")
 
-    # 3. Role relevance: must match one of the included job title patterns
+    # 3. Role relevance
     include_titles = settings.get("job_titles_include", [])
     role_hit = _contains_any(title_l, include_titles)
     if role_hit:
-        score += 40
+        # Raised from 40 so a solid role + neutral seniority can clear 60
+        # even with a weak location signal (common for Google CSE results).
+        score += 45
         reasons.append(f"title matches target role: {role_hit}")
     else:
-        # allow generic "designer" + ui/ux/product keyword combos
         if re.search(r"\bdesigner\b", title_l) and re.search(r"\b(ui|ux|product|digital)\b", title_l):
-            score += 25
+            score += 30
             reasons.append("generic designer title with UI/UX/product signal")
         else:
             job.prefilter_score = 0
             job.prefilter_reasons = ["no target role match in title"]
             return job
 
-    # 4. Seniority: don't over-penalize Senior; only lightly flag it
+    # 4. Seniority
     if "senior" in title_l:
         score += 5
         reasons.append("senior title - not auto-excluded, needs level review")
@@ -101,13 +97,19 @@ def prefilter(job: Job, settings: dict) -> Job:
         score += 25
         reasons.append(f"remote explicitly open to Romania/region: {remote_hit}")
     elif is_remote_word and not remote_hit:
-        score += 8
+        score += 10
         reasons.append("remote but Romania eligibility unclear - needs review")
+    elif job.is_watchlist_company:
+        # Watchlist companies are predominantly Romania-focused; modest credit
+        # when the posting is silent on location so legitimate design roles
+        # still reach the threshold for AI review.
+        score += 15
+        reasons.append("watchlist company (Romania-focused) - location assumed plausible")
     else:
         score += 0
         reasons.append("no Romania/remote location signal found")
 
-    # 6. Watchlist bonus (small, since watchlist companies are pre-vetted)
+    # 6. Watchlist bonus
     if job.is_watchlist_company:
         score += 5
         reasons.append("from tracked watchlist company")

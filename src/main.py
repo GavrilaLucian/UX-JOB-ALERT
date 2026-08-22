@@ -64,7 +64,12 @@ def write_github_summary(summary_lines: list[str]) -> None:
 
 def dedupe_within_run(jobs: list[Job]) -> list[Job]:
     """Collapse jobs found via multiple sources (e.g. LinkedIn + career page)
-    into one, preferring the official/company-source URL as canonical."""
+    into one, preferring the official/company-source URL as canonical.
+
+    Important: this only collapses duplicates *within the current run*.
+    It does NOT mark jobs as previously-seen. A job that appears twice in
+    the same run is still NEW if it was never in the persistent store.
+    """
     SOURCE_PRIORITY = {
         "greenhouse": 0, "lever": 0, "ashby": 0,
         "career_page": 1,
@@ -86,6 +91,26 @@ def dedupe_within_run(jobs: list[Job]) -> list[Job]:
         else:
             existing.canonical_url = existing.canonical_url or existing.url
     return list(by_fuzzy.values())
+
+
+def split_new_vs_seen(jobs: list[Job], store: SeenStore) -> tuple[list[Job], list[Job]]:
+    """Compare unique jobs against the persistent seen store.
+
+    Returns (new_jobs, previously_seen_jobs).
+    A job is NEW only if its persistent identity was not in the store
+    *before this run*. Appearing twice in the same run does not make it seen.
+    """
+    new_jobs: list[Job] = []
+    previously_seen: list[Job] = []
+    for job in jobs:
+        key = job_key(job.best_url())
+        job.job_id = key
+        if store.has(key):
+            store.touch_last_seen(key)
+            previously_seen.append(job)
+        else:
+            new_jobs.append(job)
+    return new_jobs, previously_seen
 
 
 def run() -> int:
@@ -151,16 +176,40 @@ def run() -> int:
     jobs_found_total = len(all_jobs)
 
     # 4. Cross-source de-duplication within this run (LinkedIn + career page = 1 job)
-    all_jobs = dedupe_within_run(all_jobs)
-    log.info("%d unique jobs after cross-source de-duplication.", len(all_jobs))
+    unique_jobs = dedupe_within_run(all_jobs)
+    duplicates_removed = jobs_found_total - len(unique_jobs)
+    log.info(
+        "%d unique jobs after cross-source de-duplication (%d duplicates removed).",
+        len(unique_jobs),
+        duplicates_removed,
+    )
 
-    # 5. Keyword prefilter (free)
-    all_jobs = apply_prefilter(all_jobs, cfg.settings)
+    # 5. Load persistent seen store EARLY (before filtering) so we can report
+    #    how many unique jobs are truly new vs already known.
+    store_path = ROOT_DIR / cfg.storage_cfg.get("seen_jobs_path", "data/seen_jobs.json")
+    store = SeenStore.load(store_path)
+    seen_before_run = len(store)
+    log.info("Persistent seen-jobs store size before run: %d", seen_before_run)
+
+    # Assign job_id to every unique job and split new vs previously seen.
+    # This must happen BEFORE relevance filtering so that "new" means
+    # "never seen before", not "new and relevant".
+    new_unique_jobs, previously_seen_jobs = split_new_vs_seen(unique_jobs, store)
+    log.info(
+        "Of %d unique jobs: %d new/unseen, %d previously seen.",
+        len(unique_jobs),
+        len(new_unique_jobs),
+        len(previously_seen_jobs),
+    )
+
+    # 6. Keyword prefilter (free) — applied to ALL unique jobs so we can
+    #    report how many would pass, but we only notify NEW ones.
+    scored_jobs = apply_prefilter(unique_jobs, cfg.settings)
     prefilter_min = cfg.ai_filter_cfg.get("only_score_if_prefilter_score_at_least", 40)
-    candidates = [j for j in all_jobs if j.prefilter_score >= prefilter_min]
+    candidates = [j for j in scored_jobs if j.prefilter_score >= prefilter_min]
     log.info("%d jobs passed the keyword prefilter (>= %d).", len(candidates), prefilter_min)
 
-    # 6. AI relevance filter (paid, only for prefilter survivors)
+    # 7. AI relevance filter (paid, only for prefilter survivors)
     if cfg.ai_filter_cfg.get("enabled", True):
         candidates = apply_ai_filter(
             candidates,
@@ -172,32 +221,34 @@ def run() -> int:
 
     relevant_jobs = [j for j in candidates if j.final_score() >= cfg.relevance_threshold]
     relevant_jobs.sort(key=lambda j: j.final_score(), reverse=True)
-    log.info("%d jobs are relevant (score >= %d).", len(relevant_jobs), cfg.relevance_threshold)
+    rejected_by_relevance = len(candidates) - len(relevant_jobs)
+    log.info(
+        "%d jobs are relevant (score >= %d); %d rejected by relevance filter.",
+        len(relevant_jobs),
+        cfg.relevance_threshold,
+        rejected_by_relevance,
+    )
 
-    # 7. De-duplicate against persistent storage (only NEW jobs get notified)
-    store_path = ROOT_DIR / cfg.storage_cfg.get("seen_jobs_path", "data/seen_jobs.json")
-    store = SeenStore.load(store_path)
-
+    # 8. Among relevant jobs, keep only those that are NEW (not in seen store)
+    new_job_id_set = {j.job_id for j in new_unique_jobs if j.job_id}
     new_watchlist_jobs: list[Job] = []
     new_new_company_jobs: list[Job] = []
 
     for job in relevant_jobs:
-        key = job_key(job.best_url())
-        job.job_id = key
-        if store.has(key):
-            store.touch_last_seen(key)
+        if job.job_id not in new_job_id_set:
+            # Already known from a previous run
             continue
         if job.is_watchlist_company:
             new_watchlist_jobs.append(job)
         else:
             new_new_company_jobs.append(job)
 
-    new_jobs_count = len(new_watchlist_jobs) + len(new_new_company_jobs)
-    log.info("%d NEW relevant jobs to notify (not previously seen).", new_jobs_count)
+    new_relevant_count = len(new_watchlist_jobs) + len(new_new_company_jobs)
+    log.info("%d NEW relevant jobs to notify (not previously seen).", new_relevant_count)
 
-    # 8. Telegram notification
+    # 9. Telegram notification — only for new relevant jobs
     notifications_sent = 0
-    if new_jobs_count > 0:
+    if new_relevant_count > 0:
         notifications_sent = telegram.notify(
             cfg.secrets.telegram_bot_token,
             cfg.secrets.telegram_chat_id,
@@ -210,26 +261,38 @@ def run() -> int:
     else:
         log.info("No new relevant jobs today - not sending any Telegram message.")
 
-    # 9. Persist state (all relevant jobs, whether new or already seen, get marked seen)
-    new_job_ids = {id(j) for j in new_watchlist_jobs} | {id(j) for j in new_new_company_jobs}
+    # 10. Persist state: mark ALL relevant jobs as seen (so we don't re-notify
+    #     next time even if they still pass the filter). Jobs that failed
+    #     relevance are intentionally NOT marked, so an improved filter can
+    #     still surface them later.
+    notified_ids = {id(j) for j in new_watchlist_jobs} | {id(j) for j in new_new_company_jobs}
     for job in relevant_jobs:
-        was_notified = id(job) in new_job_ids
+        was_notified = id(job) in notified_ids
         store.mark_seen(job, notification_sent=was_notified and notifications_sent > 0)
 
     pruned = store.prune(cfg.storage_cfg.get("max_age_days_to_keep", 120))
     store.save()
+    saved_to_store = len(relevant_jobs)
 
-    # 10. GitHub Actions summary
+    # 11. GitHub Actions summary — detailed debugging metrics
     write_github_summary([
         "## UX Job Alerts - run summary",
-        f"- Sources checked: {sources_checked}",
-        f"- Raw jobs found: {jobs_found_total}",
-        f"- New jobs (unseen before this run): {new_jobs_count}",
-        f"- Relevant jobs (score >= {cfg.relevance_threshold}): {len(relevant_jobs)}",
-        f"- Telegram notifications sent: {notifications_sent}",
-        f"- Errors: {len(errors)}",
+        f"- **Persistent seen jobs before run:** {seen_before_run}",
+        f"- **Raw jobs found:** {jobs_found_total}",
+        f"- **Duplicate jobs removed (same run):** {duplicates_removed}",
+        f"- **Unique jobs:** {len(unique_jobs)}",
+        f"- **Previously seen (in store):** {len(previously_seen_jobs)}",
+        f"- **New/unseen (not in store):** {len(new_unique_jobs)}",
+        f"- **Passed keyword prefilter (>= {prefilter_min}):** {len(candidates)}",
+        f"- **Passed relevance filter (score >= {cfg.relevance_threshold}):** {len(relevant_jobs)}",
+        f"- **Rejected by relevance filter:** {rejected_by_relevance}",
+        f"- **New relevant jobs (to notify):** {new_relevant_count}",
+        f"- **Telegram notifications sent:** {notifications_sent}",
+        f"- **Saved to seen store this run:** {saved_to_store}",
+        f"- **Seen-jobs store size after run:** {len(store)} (pruned {pruned} stale entries)",
+        f"- **Sources checked:** {sources_checked}",
+        f"- **Errors:** {len(errors)}",
         *(f"  - {e}" for e in errors),
-        f"- Seen-jobs store size: {len(store)} (pruned {pruned} stale entries)",
     ])
 
     # Never fail the whole workflow just because one source had an error -

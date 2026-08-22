@@ -19,6 +19,7 @@ the search engine ID ("cx") in SEARCH_ENGINE_ID.
 from __future__ import annotations
 
 import logging
+import re
 import requests
 
 from ..models import Job
@@ -26,6 +27,26 @@ from ..models import Job
 log = logging.getLogger(__name__)
 
 API_URL = "https://www.googleapis.com/customsearch/v1"
+
+# Patterns used to lift a rough location string out of a search snippet/title
+# when the API does not provide a dedicated location field.
+_LOCATION_RE = re.compile(
+    r"(?i)\b("
+    r"Bucharest|București|Bucuresti|"
+    r"Cluj(?:-Napoca)?|Ia[sș]i|Iasi|"
+    r"Timi[sș]oara|Timisoara|Bra[sș]ov|Brasov|"
+    r"Remote\s*(?:Romania|România|EU|Europe|EMEA)?|"
+    r"Romania|România"
+    r")\b"
+)
+
+
+def _guess_location(title: str, snippet: str) -> str:
+    for text in (title, snippet):
+        m = _LOCATION_RE.search(text or "")
+        if m:
+            return m.group(0)
+    return ""
 
 
 def search(query: str, api_key: str, engine_id: str, num: int = 10, timeout: int = 15) -> list[Job]:
@@ -60,12 +81,14 @@ def search(query: str, api_key: str, engine_id: str, num: int = 10, timeout: int
             continue
         # Best-effort company guess from the domain; refined later by filters/AI.
         company_guess = display_link.replace("www.", "").split(".")[0].title()
+        location_guess = _guess_location(title, snippet)
         jobs.append(Job(
             title=title,
             company=company_guess,
             url=url,
             source="google_cse",
             description_snippet=snippet,
+            location_text=location_guess,
         ))
     return jobs
 
