@@ -1,1 +1,50 @@
-{}
+{
+  "greenhouse:5326986": {
+    "canonical_url": null,
+    "company": "Canonical",
+    "first_seen_at": "2026-08-22T10:34:45.578028+00:00",
+    "last_seen_at": "2026-08-22T10:34:45.578028+00:00",
+    "notification_sent": true,
+    "published_at": "2026-08-05T18:23:33-04:00",
+    "relevance_score": 73,
+    "source": "greenhouse",
+    "title": "Visual Designer",
+    "url": "https://job-boards.greenhouse.io/canonical/jobs/5326986"
+  },
+  "greenhouse:6072086": {
+    "canonical_url": null,
+    "company": "Canonical",
+    "first_seen_at": "2026-08-22T10:34:45.578024+00:00",
+    "last_seen_at": "2026-08-22T10:34:45.578024+00:00",
+    "notification_sent": true,
+    "published_at": "2026-08-05T18:23:33-04:00",
+    "relevance_score": 73,
+    "source": "greenhouse",
+    "title": "UX Designer - Infrastructure",
+    "url": "https://job-boards.greenhouse.io/canonical/jobs/6072086"
+  },
+  "greenhouse:7043026": {
+    "canonical_url": null,
+    "company": "Canonical",
+    "first_seen_at": "2026-08-22T10:34:45.578018+00:00",
+    "last_seen_at": "2026-08-22T10:34:45.578018+00:00",
+    "notification_sent": true,
+    "published_at": "2026-08-05T18:23:33-04:00",
+    "relevance_score": 73,
+    "source": "greenhouse",
+    "title": "UX Designer - Developer experience",
+    "url": "https://job-boards.greenhouse.io/canonical/jobs/7043026"
+  },
+  "greenhouse:7043028": {
+    "canonical_url": null,
+    "company": "Canonical",
+    "first_seen_at": "2026-08-22T10:34:45.577992+00:00",
+    "last_seen_at": "2026-08-22T10:34:45.577992+00:00",
+    "notification_sent": true,
+    "published_at": "2026-08-05T18:23:33-04:00",
+    "relevance_score": 73,
+    "source": "greenhouse",
+    "title": "UX Designer - Design systems",
+    "url": "https://job-boards.greenhouse.io/canonical/jobs/7043028"
+  }
+}
