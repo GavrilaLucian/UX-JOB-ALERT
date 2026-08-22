@@ -1,0 +1,78 @@
+{
+  "timezone": "Europe/Bucharest",
+
+  "job_titles_include": [
+    "UI Designer", "UX Designer", "UI/UX Designer", "UX/UI Designer",
+    "Product Designer", "Digital Product Designer", "Visual Designer",
+    "Interaction Designer", "Design Engineer", "Web Designer",
+    "UI Engineer", "Experience Designer", "Design Systems Designer"
+  ],
+
+  "excluded_title_keywords": [
+    "Lead Designer", "Design Lead", "Staff Product Designer", "Staff Designer",
+    "Principal Product Designer", "Principal Designer", "Head of Design",
+    "Design Manager", "Design Director", "VP Design", "VP of Design",
+    "Creative Director", "Art Director", "Brand Designer", "Graphic Designer",
+    "Motion Designer", "Video Editor", "Print Designer", "Social Media Designer",
+    "Marketing Designer"
+  ],
+
+  "excluded_field_keywords": [
+    "branding", "logo design", "motion graphics", "video editing",
+    "print design", "social media", "packaging design", "illustrator wanted"
+  ],
+
+  "visual_designer_keep_keywords": [
+    "digital product", "UI", "design system", "software", "app", "web app",
+    "SaaS", "platform", "Figma"
+  ],
+
+  "location_keywords_priority": [
+    "Bucharest", "București", "Remote Romania", "Romania", "Cluj", "Cluj-Napoca",
+    "Iasi", "Iași", "Timisoara", "Timișoara", "Brasov", "Brașov"
+  ],
+
+  "romania_remote_signals": [
+    "romania", "românia", "eu remote", "europe remote", "emea remote",
+    "cee remote", "central europe", "eastern europe"
+  ],
+
+  "seniority_target": ["Junior", "Mid", "Mid-level", "Senior"],
+  "seniority_exclude_terms": ["Lead", "Staff", "Principal", "Head", "Director", "VP", "Manager"],
+
+  "relevance_threshold": 60,
+  "max_jobs_per_telegram_message": 6,
+  "recency_primary_hours": 24,
+  "recency_fallback_days": 7,
+
+  "search": {
+    "google_cse_queries": [
+      "UI Designer Romania",
+      "UX Designer Romania",
+      "Product Designer Romania",
+      "UI UX Designer Bucharest",
+      "Product Designer Bucharest",
+      "UX Designer remote Romania",
+      "Digital Product Designer Romania",
+      "Visual Designer Bucharest jobs",
+      "Interaction Designer Romania"
+    ],
+    "google_cse_results_per_query": 10,
+    "per_company_fallback_queries_enabled": true
+  },
+
+  "rss_feed_urls": [],
+
+  "ai_filter": {
+    "enabled": true,
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5-20251001",
+    "only_score_if_prefilter_score_at_least": 40,
+    "max_candidates_per_run": 40
+  },
+
+  "storage": {
+    "seen_jobs_path": "data/seen_jobs.json",
+    "max_age_days_to_keep": 120
+  }
+}

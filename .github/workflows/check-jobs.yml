@@ -1,0 +1,53 @@
+name: Check UX/UI/Product Design Jobs
+
+on:
+  schedule:
+    # GitHub Actions added native IANA timezone support for scheduled
+    # workflows in March 2026, so this runs at 09:00 Europe/Bucharest
+    # year-round with no manual UTC/DST conversion needed.
+    - cron: "0 9 * * *"
+      timezone: "Europe/Bucharest"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ux-job-alerts-run
+  cancel-in-progress: false
+
+jobs:
+  check-jobs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run job check
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
+          SEARCH_ENGINE_ID: ${{ secrets.SEARCH_ENGINE_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m src.main
+
+      - name: Commit updated seen-jobs store
+        run: |
+          git config user.name "ux-job-alerts-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/seen_jobs.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: update seen jobs store [skip ci]"
+            git push
+          fi
