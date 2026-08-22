@@ -28,8 +28,7 @@ else:
 
 
 class SecretRedactingFilter(logging.Filter):
-    """Belt-and-braces: never let a secret value leak into logs even if a
-    future code change accidentally logs a raw variable."""
+    """Never let a secret value leak into logs."""
 
     def __init__(self, secrets: list[str]):
         super().__init__()
@@ -66,8 +65,9 @@ def dedupe_within_run(jobs: list[Job]) -> list[Job]:
     """Collapse duplicates within this run by URL identity first, then by
     company+title. Prefer official ATS sources over Google/search results.
 
-    Important: this only collapses duplicates *within the current run*.
-    It does NOT mark jobs as previously-seen.
+    This only collapses duplicates within the current run. It does NOT mark
+    jobs as previously-seen. A job that appears twice in the same run is
+    still NEW if it was never in the persistent store.
     """
     SOURCE_PRIORITY = {
         "greenhouse": 0, "lever": 0, "ashby": 0,
@@ -85,7 +85,7 @@ def dedupe_within_run(jobs: list[Job]) -> list[Job]:
         existing.canonical_url = existing.canonical_url or existing.url
         return existing
 
-    # Pass 1: same URL / ATS id = same job (fixes 4x Canonical same link)
+    # Pass 1: same URL / ATS id = same job (prevents 4x same Canonical link)
     by_url: dict[str, Job] = {}
     for job in jobs:
         key = job_key(job.best_url())
@@ -95,7 +95,7 @@ def dedupe_within_run(jobs: list[Job]) -> list[Job]:
         else:
             by_url[key] = job
 
-    # Pass 2: same company + title (LinkedIn vs career page)
+    # Pass 2: same company + title (LinkedIn vs career page with different URLs)
     by_fuzzy: dict[str, Job] = {}
     for job in by_url.values():
         fkey = fuzzy_key(job.company, job.title)
@@ -106,17 +106,17 @@ def dedupe_within_run(jobs: list[Job]) -> list[Job]:
 
     return list(by_fuzzy.values())
 
+
 def split_new_vs_seen(jobs: list[Job], store: SeenStore) -> tuple[list[Job], list[Job]]:
     """Compare unique jobs against the persistent seen store.
 
     Returns (new_jobs, previously_seen_jobs).
-    A job is NEW only if its persistent identity was not in the store
-    *before this run*. Appearing twice in the same run does not make it seen.
+    A job is NEW only if its identity was not in the store before this run.
     """
     new_jobs: list[Job] = []
     previously_seen: list[Job] = []
     for job in jobs:
-        key = job_key(job.best_url())
+        key = job.job_id or job_key(job.best_url())
         job.job_id = key
         if store.has(key):
             store.touch_last_seen(key)
@@ -140,7 +140,7 @@ def run() -> int:
     errors: list[str] = []
     sources_checked = 0
 
-    # 1. Watchlist companies (ATS APIs where known, Google CSE fallback otherwise)
+    # 1. Watchlist companies
     log.info("Checking %d watchlist companies...", len(cfg.companies))
     watchlist_jobs = watchlist.check_watchlist(
         companies=cfg.companies,
@@ -152,7 +152,7 @@ def run() -> int:
     sources_checked += len(cfg.companies)
     log.info("Watchlist check returned %d raw job listings.", len(watchlist_jobs))
 
-    # 2. Discovery mode (broad Google CSE queries to find new companies)
+    # 2. Discovery mode
     discovery_jobs: list[Job] = []
     try:
         queries = cfg.search_cfg.get("google_cse_queries", [])
@@ -167,7 +167,7 @@ def run() -> int:
         log.warning(msg)
         errors.append(msg)
 
-    # 3. Optional RSS feeds (only whatever the user has configured/verified)
+    # 3. Optional RSS feeds
     rss_jobs: list[Job] = []
     feed_urls = cfg.settings.get("rss_feed_urls", [])
     if feed_urls:
@@ -188,7 +188,7 @@ def run() -> int:
     all_jobs = watchlist_jobs + discovery_jobs + rss_jobs
     jobs_found_total = len(all_jobs)
 
-    # 4. Cross-source de-duplication within this run (LinkedIn + career page = 1 job)
+    # 4. Cross-source de-duplication within this run
     unique_jobs = dedupe_within_run(all_jobs)
     duplicates_removed = jobs_found_total - len(unique_jobs)
     log.info(
@@ -197,16 +197,12 @@ def run() -> int:
         duplicates_removed,
     )
 
-    # 5. Load persistent seen store EARLY (before filtering) so we can report
-    #    how many unique jobs are truly new vs already known.
+    # 5. Load persistent seen store early
     store_path = ROOT_DIR / cfg.storage_cfg.get("seen_jobs_path", "data/seen_jobs.json")
     store = SeenStore.load(store_path)
     seen_before_run = len(store)
     log.info("Persistent seen-jobs store size before run: %d", seen_before_run)
 
-    # Assign job_id to every unique job and split new vs previously seen.
-    # This must happen BEFORE relevance filtering so that "new" means
-    # "never seen before", not "new and relevant".
     new_unique_jobs, previously_seen_jobs = split_new_vs_seen(unique_jobs, store)
     log.info(
         "Of %d unique jobs: %d new/unseen, %d previously seen.",
@@ -215,14 +211,13 @@ def run() -> int:
         len(previously_seen_jobs),
     )
 
-    # 6. Keyword prefilter (free) — applied to ALL unique jobs so we can
-    #    report how many would pass, but we only notify NEW ones.
+    # 6. Keyword prefilter
     scored_jobs = apply_prefilter(unique_jobs, cfg.settings)
     prefilter_min = cfg.ai_filter_cfg.get("only_score_if_prefilter_score_at_least", 40)
     candidates = [j for j in scored_jobs if j.prefilter_score >= prefilter_min]
     log.info("%d jobs passed the keyword prefilter (>= %d).", len(candidates), prefilter_min)
 
-    # 7. AI relevance filter (paid, only for prefilter survivors)
+    # 7. AI relevance filter
     if cfg.ai_filter_cfg.get("enabled", True):
         candidates = apply_ai_filter(
             candidates,
@@ -242,17 +237,17 @@ def run() -> int:
         rejected_by_relevance,
     )
 
-    # 8. Among relevant jobs, keep only those that are NEW (not in seen store)
+    # 8. Among relevant jobs, keep only NEW ones (and never queue same URL twice)
     new_job_id_set = {j.job_id for j in new_unique_jobs if j.job_id}
     new_watchlist_jobs: list[Job] = []
     new_new_company_jobs: list[Job] = []
+    notified_keys: set[str] = set()
 
-      notified_keys: set[str] = set()
     for job in relevant_jobs:
         if not job.job_id or job.job_id not in new_job_id_set:
             continue
         if job.job_id in notified_keys:
-            continue  # same URL already queued this run
+            continue
         notified_keys.add(job.job_id)
         if job.is_watchlist_company:
             new_watchlist_jobs.append(job)
@@ -262,7 +257,7 @@ def run() -> int:
     new_relevant_count = len(new_watchlist_jobs) + len(new_new_company_jobs)
     log.info("%d NEW relevant jobs to notify (not previously seen).", new_relevant_count)
 
-    # 9. Telegram notification — only for new relevant jobs
+    # 9. Telegram notification
     notifications_sent = 0
     if new_relevant_count > 0:
         notifications_sent = telegram.notify(
@@ -277,10 +272,7 @@ def run() -> int:
     else:
         log.info("No new relevant jobs today - not sending any Telegram message.")
 
-    # 10. Persist state: mark ALL relevant jobs as seen (so we don't re-notify
-    #     next time even if they still pass the filter). Jobs that failed
-    #     relevance are intentionally NOT marked, so an improved filter can
-    #     still surface them later.
+    # 10. Persist state
     notified_ids = {id(j) for j in new_watchlist_jobs} | {id(j) for j in new_new_company_jobs}
     for job in relevant_jobs:
         was_notified = id(job) in notified_ids
@@ -290,7 +282,7 @@ def run() -> int:
     store.save()
     saved_to_store = len(relevant_jobs)
 
-    # 11. GitHub Actions summary — detailed debugging metrics
+    # 11. GitHub Actions summary
     write_github_summary([
         "## UX Job Alerts - run summary",
         f"- **Persistent seen jobs before run:** {seen_before_run}",
@@ -311,8 +303,6 @@ def run() -> int:
         *(f"  - {e}" for e in errors),
     ])
 
-    # Never fail the whole workflow just because one source had an error -
-    # only fail on something that would make the run silently useless.
     return 0
 
 
