@@ -61,6 +61,17 @@
     {"name": "Porsche Engineering", "careers_url": "https://www.porsche-engineering.com/career", "ats": null, "ats_slug": null},
     {"name": "BMW TechWorks Romania", "careers_url": "https://www.bmwtechworks.ro/careers", "ats": null, "ats_slug": null},
     {"name": "LSEG", "careers_url": "https://www.lseg.com/careers", "ats": null, "ats_slug": null},
-    {"name": "Lenovo", "careers_url": "https://jobs.lenovo.com/", "ats": null, "ats_slug": null}
+    {"name": "Lenovo", "careers_url": "https://jobs.lenovo.com/", "ats": null, "ats_slug": null},
+    {"name": "Endava", "careers_url": "https://www.endava.com/careers", "ats": null, "ats_slug": null},
+    {"name": "8x8", "careers_url": "https://www.8x8.com/careers", "ats": null, "ats_slug": null},
+    {"name": "ARRISE", "careers_url": "https://www.arrise.com/careers", "ats": null, "ats_slug": null},
+    {"name": "NAGA", "careers_url": "https://naga.com/careers", "ats": null, "ats_slug": null},
+    {"name": "Cognyte", "careers_url": "https://www.cognyte.com/careers/", "ats": null, "ats_slug": null},
+    {"name": "Expleo", "careers_url": "https://www.expleogroup.com/careers/", "ats": null, "ats_slug": null},
+    {"name": "Concentrix", "careers_url": "https://www.concentrix.com/careers/", "ats": null, "ats_slug": null},
+    {"name": "Szallas Group", "careers_url": "https://szallasgroup.com/career/", "ats": null, "ats_slug": null},
+    {"name": "Revolut", "careers_url": "https://www.revolut.com/careers/", "ats": null, "ats_slug": null},
+    {"name": "SupportYourApp", "careers_url": "https://supportyourapp.com/careers/", "ats": null, "ats_slug": null},
+    {"name": "TrustYou", "careers_url": "https://www.trustyou.com/careers/", "ats": null, "ats_slug": null}
   ]
 }
