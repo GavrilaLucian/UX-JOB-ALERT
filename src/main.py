@@ -63,12 +63,11 @@ def write_github_summary(summary_lines: list[str]) -> None:
 
 
 def dedupe_within_run(jobs: list[Job]) -> list[Job]:
-    """Collapse jobs found via multiple sources (e.g. LinkedIn + career page)
-    into one, preferring the official/company-source URL as canonical.
+    """Collapse duplicates within this run by URL identity first, then by
+    company+title. Prefer official ATS sources over Google/search results.
 
     Important: this only collapses duplicates *within the current run*.
-    It does NOT mark jobs as previously-seen. A job that appears twice in
-    the same run is still NEW if it was never in the persistent store.
+    It does NOT mark jobs as previously-seen.
     """
     SOURCE_PRIORITY = {
         "greenhouse": 0, "lever": 0, "ashby": 0,
@@ -76,22 +75,36 @@ def dedupe_within_run(jobs: list[Job]) -> list[Job]:
         "rss": 2,
         "google_cse": 3,
     }
-    by_fuzzy: dict[str, Job] = {}
-    for job in jobs:
-        fkey = fuzzy_key(job.company, job.title)
-        existing = by_fuzzy.get(fkey)
-        if existing is None:
-            by_fuzzy[fkey] = job
-            continue
-        existing_priority = SOURCE_PRIORITY.get(existing.source, 9)
-        new_priority = SOURCE_PRIORITY.get(job.source, 9)
-        if new_priority < existing_priority:
-            job.canonical_url = job.canonical_url or job.url
-            by_fuzzy[fkey] = job
-        else:
-            existing.canonical_url = existing.canonical_url or existing.url
-    return list(by_fuzzy.values())
 
+    def prefer(existing: Job, new: Job) -> Job:
+        ep = SOURCE_PRIORITY.get(existing.source, 9)
+        np = SOURCE_PRIORITY.get(new.source, 9)
+        if np < ep:
+            new.canonical_url = new.canonical_url or new.url
+            return new
+        existing.canonical_url = existing.canonical_url or existing.url
+        return existing
+
+    # Pass 1: same URL / ATS id = same job (fixes 4x Canonical same link)
+    by_url: dict[str, Job] = {}
+    for job in jobs:
+        key = job_key(job.best_url())
+        job.job_id = key
+        if key in by_url:
+            by_url[key] = prefer(by_url[key], job)
+        else:
+            by_url[key] = job
+
+    # Pass 2: same company + title (LinkedIn vs career page)
+    by_fuzzy: dict[str, Job] = {}
+    for job in by_url.values():
+        fkey = fuzzy_key(job.company, job.title)
+        if fkey in by_fuzzy:
+            by_fuzzy[fkey] = prefer(by_fuzzy[fkey], job)
+        else:
+            by_fuzzy[fkey] = job
+
+    return list(by_fuzzy.values())
 
 def split_new_vs_seen(jobs: list[Job], store: SeenStore) -> tuple[list[Job], list[Job]]:
     """Compare unique jobs against the persistent seen store.
@@ -234,10 +247,13 @@ def run() -> int:
     new_watchlist_jobs: list[Job] = []
     new_new_company_jobs: list[Job] = []
 
+      notified_keys: set[str] = set()
     for job in relevant_jobs:
-        if job.job_id not in new_job_id_set:
-            # Already known from a previous run
+        if not job.job_id or job.job_id not in new_job_id_set:
             continue
+        if job.job_id in notified_keys:
+            continue  # same URL already queued this run
+        notified_keys.add(job.job_id)
         if job.is_watchlist_company:
             new_watchlist_jobs.append(job)
         else:
